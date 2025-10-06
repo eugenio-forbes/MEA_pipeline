@@ -1,0 +1,56 @@
+#!/bin/bash
+
+# This template is designed to be loaded by MEA_pipeline code to modify
+# the directory containing the spikes of MEA channels that had negative
+# spikes that surpassed threshold set in n02_extract_spikes.m
+
+# If you want to change the way combinato runs i.e. changing parameters,
+# edit custom_options.txt.
+
+#Load anaconda and source conda.sh file so that conda commands can be executed here
+module load python/3.6.4-anaconda
+source /cm/shared/apps/python/3.6.4-anaconda/etc/profile.d/conda.sh
+export PATH="${PATH}:/path/to/MEA_pipeline/base_code/combinato"
+export PYTHONPATH="${PYTHONPATH}:/path/to/MEA_pipeline/base_code/combinato"
+
+#Check if combinato conda environment exists from list and activate it
+if $(conda env list | grep -q "combinato")
+then
+    conda activate combinato
+else                          #If not then install dependencies from .yml and add paths to .bashrc
+
+    conda env create -f /path/to/MEA_pipeline/base_code/combinato.yml
+    echo 'export PATH="${PATH}:/path/to/MEA_pipeline/base_code/combinato/"' >> ~/.bashrc
+    echo 'export PYTHONPATH="${PYTHONPATH}:/path/to/MEA_pipeline/base_code/combinato/"' >> ~/.bashrc
+    echo 'source /cm/shared/apps/python/3.6.4-anaconda/etc/profile.d/conda.sh' >> ~/.bashrc
+    conda activate combinato
+fi
+
+dirPath="%s"
+# Directory to be edited by Matlab using sprintf(this_whole_text,path_to_combinato_folder) function.
+# Combinato commands will execute in this directory, so change directory to this
+cd $dirPath
+
+# Different from AdTech micros, not finding/masking concurrent spikes given
+# that adjacent electrodes could record from the same neuron. Only masking
+# spikes with artifactual features
+
+echo 'Masking artifactual spikes...\n'
+css-mask-artifacts
+
+# Eugenio: Took out part of plotting extracted spikes because it takes a significant amount of time
+
+# Prepare for sorting negative and positive spikes
+echo 'Preparing sorting of spikes...\n'
+css-prepare-sorting --neg --jobs do_sort_neg.txt --label %s
+
+# Run clustering of negative and positive spikes
+echo 'Clustering negative spikes...\n'
+css-cluster --jobs sort_neg_%s.txt
+
+# Combine clustering results
+echo 'Combining results...\n'
+css-combine --jobs sort_neg_%s.txt --no-plots
+
+# This will return a status of 0 to matlab function once file is executed and done
+exit 0
